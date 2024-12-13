@@ -1,0 +1,104 @@
+rm(list=ls()) #clear
+setwd("C:/Users/Caity/Downloads") # set wd
+
+# import dataset
+library(haven)
+library(stringr)
+library(plyr)
+library(dplyr)
+library(reshape2)
+library(ggplot2)
+library(car)
+library(R2jags)
+library(MASS)
+dat <- readr::read_csv("anes_timeseries_2020_csv_20220210.csv")
+
+# # federico 0-1 recode
+std01<-function(x){
+  min.x<-min(x, na.rm=TRUE)
+  max.x<-max(x-min.x, na.rm=TRUE)
+  return((x-min.x)/max.x)}
+
+
+
+# prepare variables
+# 2020 economic evaluations
+dat$secon <- abs(dat$V201324-6)
+dat$secon <- ifelse(dat$secon==15|dat$secon==14,NA,dat$secon)
+dat$secon <- std01(dat$secon)
+
+
+# 2020 pocketbook
+dat$pecon <- ifelse(dat$V201594==-8|dat$V201594==-9,NA,dat$V201594)
+dat$pecon <- std01(dat$pecon)
+table(dat$pecon)
+table(dat$V201594)
+
+# age
+dat$age <- ifelse(dat$V201507x==-9,NA,dat$V201507x)
+dat$age <- std01(dat$V201507x)
+
+# gender 
+dat$gender <- ifelse(dat$V201600==-9,NA,dat$V201600)
+dat$male <- ifelse(dat$gender==1,1,0)
+
+# race
+dat$race <- ifelse(dat$V201549x==-9|dat$V201549x==-8, NA,dat$V201549x)
+dat$white <- ifelse(dat$race==1,1,0)
+
+# income
+dat$income <- ifelse(dat$V201617x==-9|dat$V201617x==-5,NA,dat$V201617x)
+dat$income <- std01(dat$income)
+
+# education
+dat$education <- ifelse(dat$V201514x==-9|dat$V201514x==-8|dat$V201514x==-2|dat$V201514x==-1,NA,dat$V201514x)
+dat$education <- std01(dat$education)
+
+# 2016 vote choice
+dat$vc_16 <- ifelse(dat$V201103==-9|dat$V201103==-8|dat$V201103==-1,"NA",dat$V201103)
+dat$vdem_16 <- ifelse(dat$vc_16==1,1,0)
+dat$vrep_16 <- ifelse(dat$vc_16==2,1,0)
+
+
+# 2020 party ID
+dat$pid20 <- ifelse(dat$V201231x==-9|dat$V201231x==-8,NA,dat$V201231x)
+dat$dem_20 <- ifelse(dat$pid20==1|dat$pid20==2|dat$pid20==3,1,0)
+dat$rep_20 <- ifelse(dat$pid20==5|dat$pid20==6|dat$pid20==7,1,0)
+table(dat$pid20)
+dat$pid20 <- std01(dat$pid20)
+# 2020 vote choice
+
+dat$vc_20pre <- ifelse(dat$V201029==-9|dat$V201029==-1,"NA",dat$V201029)
+
+dat$vc_20post <- ifelse(dat$V202073==-9|dat$V202073==-1|dat$V202073==-8|dat$V202073==-7|dat$V202073==-6,"NA",dat$V202073)
+
+dat$vrep_20 <- ifelse(dat$vc_20post==2|dat$vc_20pre==2,1,0)
+
+# h1a: 
+h1a <- glm(vrep_20~secon + pecon + age + male + white + income + education + vrep_16,data=dat,family="binomial")
+summary(h1a)
+
+library(stargazer)
+stargazer(h1a)
+
+
+plogis(coef(h1a))
+
+h2a <- polr(as.ordered(secon)~pid20 + pecon + age + male + white + income + education,data=dat,method="logistic")
+summary(h2a)
+library(foreign)
+library(mnormt)
+library(AER)
+library(stats)
+library(BSDA)
+coeftest(h2a)
+
+h2p <- plot_model(h2a,type="pred",terms="rep_20")
+h2p
+
+stargazer(h2a)
+
+h3a <- polr(as.ordered(pecon)~pid20 + secon + age + male + white + income + education,data=dat,method="logistic")
+summary(h3a)
+coeftest(h3a)
+stargazer(h3a)
